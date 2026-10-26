@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O que é Fake News</title>
+<meta name="description" content="Combate à Desinformação: projeto do Colégio São José para ensinar a identificar fake news, com detector de notícias falsas e voluntários verificando conteúdos.">
+<meta name="keywords" content="combate, desinformação, combate à desinformação, fake news, notícias falsas, detector de fake news, checagem de fatos, colégio são josé">
+<link rel="canonical" href="https://SEU-DOMINIO.vercel.app/oquee/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="O que é Fake News | Combate à Desinformação">
+<meta property="og:description" content="Combate à Desinformação: projeto do Colégio São José para ensinar a identificar fake news, com detector de notícias falsas e voluntários verificando conteúdos.">
+<meta property="og:url" content="https://SEU-DOMINIO.vercel.app/oquee/">
+<meta property="og:locale" content="pt_BR">
+
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand" onclick="location.href='/'"><span>INÍCIO</span></div>
+    <div class="links">
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+    <button class="kebab" aria-label="Abrir menu"><i></i><i></i><i></i></button>
+    <div class="mobile-menu">
+      <a href="/">INÍCIO</a>
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+  </nav>
+
+  <section class="section">
+    <div class="card fade-up">
+      <h2>O que é Fake News?</h2>
+      <p id="paragrafo-1">É uma notícia mentirosa. Alguém inventa ou distorce uma informação
+      e espalha como se fosse verdade, geralmente para enganar as pessoas,
+      causar confusão ou ganhar cliques e compartilhamentos.</p>
+    </div>
+    <div class="card fade-up delay-1">
+      <h2>Como perceber que algo é fake news?</h2>
+      <p id="paragrafo-2">Fique de olho nestes sinais: título exagerado ou muito chocante,
+      pedidos para "compartilhar antes que apaguem", nenhuma fonte confiável,
+      muitos erros de português, e textos que tentam te deixar com muito
+      medo ou muita raiva rapidamente. Na dúvida, procure a mesma notícia
+      em um site de jornalismo conhecido antes de acreditar ou compartilhar.</p>
+    </div>
+    <div class="center fade-up delay-2">
+      <a class="btn" href="/detector/">CONTINUAR</a>
+    </div>
+  </section>
+
+  <footer>© 2026 Combate à Desinformação</footer>
+
+  <script type="module" src="/app.js"></script>
+  <script type="module">
+    import { db } from '/firebase-config.js';
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    getDoc(doc(db, 'conteudo', 'site')).then((snap) => {
+      if (!snap.exists()) return;
+      const dados = snap.data();
+      if (dados.oqueeParagrafo1) document.getElementById('paragrafo-1').textContent = dados.oqueeParagrafo1;
+      if (dados.oqueeParagrafo2) document.getElementById('paragrafo-2').textContent = dados.oqueeParagrafo2;
+    }).catch(() => {});
+  </script>
+</body>
+</html>

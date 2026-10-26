@@ -1,0 +1,47 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() { return request.auth != null; }
+    function meuUsuario() { return get(/databases/$(database)/documents/users/$(request.auth.uid)).data; }
+    function souAdmin() { return logado() && meuUsuario().ehAdmin == true; }
+    function souVoluntario() { return logado() && meuUsuario().ehVoluntario == true; }
+    function podeModerar() { return souAdmin() || souVoluntario(); }
+
+    // Contas: cada pessoa só lê a própria. Quem escreve é o servidor (login, cadastro e pedidos).
+    match /users/{uid} {
+      allow read: if logado() && request.auth.uid == uid;
+      allow write: if false;
+    }
+
+    // Palavras que o detector procura: só moderadores veem e editam.
+    // O site nunca recebe essa lista; o servidor é quem analisa os textos.
+    match /palavras/{id} {
+      allow read, write: if podeModerar();
+    }
+
+    // Formulários e configurações: só administradores.
+    match /config/{id} {
+      allow read, write: if souAdmin();
+    }
+
+    // Textos e formulários enviados pelo detector (criados pelo servidor).
+    match /feedback/{id} {
+      allow read, update: if podeModerar();
+      allow create, delete: if false;
+    }
+
+    // Fotos e vídeos (o arquivo fica no GitHub, aqui só o registro).
+    match /midiaSubmissoes/{id} {
+      allow read: if logado() && (resource.data.uid == request.auth.uid || podeModerar());
+      allow update: if podeModerar();
+      allow create, delete: if false;
+    }
+
+    // Textos editáveis do site.
+    match /conteudo/{id} {
+      allow read: if true;
+      allow write: if souAdmin();
+    }
+  }
+}

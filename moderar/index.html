@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Área de Moderação</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand" onclick="location.href='/'"><span>INÍCIO</span></div>
+    <div class="links">
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+    <button class="kebab" aria-label="Abrir menu"><i></i><i></i><i></i></button>
+    <div class="mobile-menu">
+      <a href="/">INÍCIO</a>
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+  </nav>
+
+  <section class="section" id="conteudo" style="display:none;">
+    <div class="card fade-up" id="card-pedidos">
+      <h2>Pedidos para ser voluntário</h2>
+      <div id="lista-pedidos"><p class="msg">Nenhum pedido no momento.</p></div>
+    </div>
+
+    <div class="card fade-up delay-1">
+      <h2>Textos para revisar</h2>
+      <p>Clique nas palavras: um clique marca como sinal de fake news, dois cliques como sinal de verdade, três voltam ao normal. Depois escolha seu veredito.</p>
+      <div class="legenda-cores">
+        <span><span class="bolinha fake"></span>sinal de fake news</span>
+        <span><span class="bolinha verdade"></span>sinal de verdade</span>
+      </div>
+      <div id="lista-textos"><p class="msg">Nenhum texto pendente no momento.</p></div>
+    </div>
+
+    <div class="card fade-up delay-2">
+      <h2>Fotos e vídeos enviados</h2>
+      <div id="lista-midias"><p class="msg">Nenhum envio pendente no momento.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="bloqueado" style="display:none;">
+    <div class="card center">
+      <p class="aviso" id="msg-bloqueado">Essa página é só para voluntários e administradores.</p>
+      <a class="btn" href="/login/">ENTRAR</a>
+    </div>
+  </section>
+
+  <footer>© 2026 Combate à Desinformação</footer>
+
+  <script type="module" src="/app.js"></script>
+  <script type="module">
+    import { auth, db } from '/firebase-config.js';
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      doc, getDoc, setDoc, updateDoc, collection, query, where, onSnapshot, increment,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { api, el, midiaElemento } from '/api.js';
+
+    const $ = (id) => document.getElementById(id);
+    let emailAtual = '';
+    const idPalavra = (t) => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 100);
+    const limpar = (s) => s.trim().toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { $('bloqueado').style.display = 'block'; return; }
+      emailAtual = user.email || '';
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      const d = snap.exists() ? snap.data() : {};
+      if (!d.ehAdmin && !d.ehVoluntario) { $('bloqueado').style.display = 'block'; return; }
+      emailAtual = d.email || '';
+      $('conteudo').style.display = 'block';
+      carregarPedidos(); carregarTextos(); carregarMidias();
+    });
+
+    // ---------- pedidos de voluntariado ----------
+    async function carregarPedidos() {
+      const box = $('lista-pedidos');
+      try {
+        const { pedidos } = await api('/api/conta', { acao: 'listarPedidos' });
+        if (!pedidos.length) { box.innerHTML = '<p class="msg">Nenhum pedido no momento.</p>'; return; }
+        box.innerHTML = '';
+        pedidos.forEach((p) => {
+          const agir = (acao) => async () => { try { await api('/api/conta', { acao, uid: p.uid }); carregarPedidos(); } catch (e) { alert(e.message); } };
+          box.appendChild(el('div', { class: 'midia-item' },
+            el('div', { style: 'flex:1;' }, el('p', { texto: (p.nome || 'Sem nome') + ' quer ser voluntário' }), el('p', { class: 'msg', texto: p.email })),
+            el('div', { class: 'acoes' },
+              el('button', { class: 'btn pequeno', texto: 'Aceitar', onclick: agir('aceitar') }),
+              el('button', { class: 'btn pequeno', texto: 'Enviar formulário', onclick: agir('pedirFormulario') }))));
+        });
+      } catch (e) { box.innerHTML = '<p class="msg">Não foi possível carregar os pedidos.</p>'; }
+    }
+
+    // ---------- textos para revisar ----------
+    function carregarTextos() {
+      const q = query(collection(db, 'feedback'), where('revisado', '==', false));
+      onSnapshot(q, (s) => {
+        const itens = s.docs.map((x) => ({ id: x.id, ...x.data() })).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+        const box = $('lista-textos');
+        if (!itens.length) { box.innerHTML = '<p class="msg">Nenhum texto pendente no momento.</p>'; return; }
+        box.innerHTML = '';
+        itens.forEach((it) => box.appendChild(cardTexto(it)));
+      });
+    }
+
+    function cardTexto(item) {
+      const caixa = el('div', { class: 'texto-revisar' });
+      item.texto.split(/(\s+)/).forEach((w) => {
+        if (!w.trim()) { caixa.appendChild(document.createTextNode(w)); return; }
+        const sp = el('span', { class: 'palavra-clicavel', texto: w });
+        sp.dataset.estado = 'neutro';
+        sp.onclick = () => {
+          const e = sp.dataset.estado;
+          sp.classList.remove('fake', 'verdade');
+          sp.dataset.estado = e === 'neutro' ? 'fake' : e === 'fake' ? 'verdade' : 'neutro';
+          if (sp.dataset.estado !== 'neutro') sp.classList.add(sp.dataset.estado);
+        };
+        caixa.appendChild(sp);
+      });
+
+      const respostas = (item.respostas || []).map((r) => el('div', { class: 'resp' }, el('strong', { texto: r.pergunta }), r.resposta));
+      const sel = el('select', { style: 'margin-top:16px;max-width:260px;' });
+      sel.innerHTML = '<option value="">Seu veredito...</option><option value="fake">É fake news</option><option value="verdadeiro">Não é fake news</option><option value="inconclusivo">Não dá para saber</option>';
+      const msg = el('p', { class: 'msg' });
+
+      const salvar = el('button', { class: 'btn pequeno', style: 'margin-top:12px;', texto: 'Salvar revisão', onclick: async () => {
+        if (!sel.value) { sel.focus(); return; }
+        try {
+          const marcadas = (estado) => [...caixa.querySelectorAll(`[data-estado="${estado}"]`)].map((s) => limpar(s.textContent)).filter((t) => idPalavra(t));
+          for (const t of new Set(marcadas('fake'))) {
+            await setDoc(doc(db, 'palavras', idPalavra(t)), { texto: t, ativa: true, fake: increment(1) }, { merge: true });
+          }
+          for (const t of new Set(marcadas('verdade'))) {
+            const ref = doc(db, 'palavras', idPalavra(t));
+            if ((await getDoc(ref)).exists()) await updateDoc(ref, { verdade: increment(1) });
+          }
+          await updateDoc(doc(db, 'feedback', item.id), { revisado: true, veredito: sel.value, revisadoPor: emailAtual });
+        } catch (e) { msg.textContent = 'Não foi possível salvar: ' + e.message; }
+      } });
+
+      const info = el('p', { class: 'msg', texto: `Previsão do programa: ${item.probabilidade}% de chance de ser falso.` });
+      return el('div', { class: 'card' }, info, caixa, respostas, sel, salvar, msg);
+    }
+
+    // ---------- fotos e vídeos ----------
+    function carregarMidias() {
+      const q = query(collection(db, 'midiaSubmissoes'), where('status', '==', 'pendente'));
+      onSnapshot(q, (s) => {
+        const itens = s.docs.map((x) => ({ id: x.id, ...x.data() })).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+        const box = $('lista-midias');
+        if (!itens.length) { box.innerHTML = '<p class="msg">Nenhum envio pendente no momento.</p>'; return; }
+        box.innerHTML = '';
+        itens.forEach((it) => {
+          const sel = el('select');
+          sel.innerHTML = '<option value="">Seu veredito...</option><option value="fake">É fake</option><option value="verdadeiro">É verdadeiro</option><option value="inconclusivo">Não dá para saber</option>';
+          const txt = el('textarea', { rows: '2', placeholder: 'Explique sua análise...', style: 'margin-top:8px;' });
+          const btn = el('button', { class: 'btn pequeno', style: 'margin-top:8px;', texto: 'Responder', onclick: async () => {
+            if (!sel.value || !txt.value.trim()) return;
+            await updateDoc(doc(db, 'midiaSubmissoes', it.id), { status: 'respondido', veredito: sel.value, resposta: txt.value.trim(), respondidoPor: emailAtual, respondidoEm: new Date().toISOString() });
+          } });
+          box.appendChild(el('div', { class: 'midia-item' }, midiaElemento(it), el('div', { style: 'flex:1;' }, sel, txt, btn)));
+        });
+      });
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "name": "combate-desinformacao",
+  "version": "3.0.0",
+  "description": "Site de combate a fake news com detector por palavras-chave e Firebase",
+  "dependencies": {
+    "firebase-admin": "^12.1.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

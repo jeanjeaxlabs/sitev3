@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minha Conta</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand" onclick="location.href='/'"><span>INÍCIO</span></div>
+    <div class="links">
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+    <button class="kebab" aria-label="Abrir menu"><i></i><i></i><i></i></button>
+    <div class="mobile-menu">
+      <a href="/">INÍCIO</a>
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+  </nav>
+
+  <section class="section" id="conteudo" style="display:none;">
+    <div class="card fade-up">
+      <h2 id="ola">Minha conta</h2>
+      <p id="status-vol" class="msg"></p>
+      <button class="btn pequeno" id="btn-voluntario" type="button" style="display:none;">QUERO SER VOLUNTÁRIO</button>
+      <p id="msg-vol" class="msg"></p>
+    </div>
+
+    <div class="card fade-up delay-1">
+      <h2>Enviar foto ou vídeo para análise</h2>
+      <p>Recebeu uma imagem ou vídeo suspeito? Envie aqui e um voluntário vai analisar e te responder. Tamanho máximo: 3 MB.</p>
+      <input type="file" id="arquivo" accept="image/*,video/*">
+      <button class="btn" id="btn-enviar" type="button" style="margin-top:16px;">ENVIAR PARA ANÁLISE</button>
+      <p id="msg-envio" class="msg"></p>
+    </div>
+
+    <div class="card fade-up delay-2">
+      <h2>Meus envios</h2>
+      <div id="lista-envios"><p class="msg">Nenhum envio ainda.</p></div>
+    </div>
+  </section>
+
+  <section class="section" id="bloqueado" style="display:none;">
+    <div class="card center">
+      <p class="aviso">Você precisa entrar na sua conta para ver essa página.</p>
+      <a class="btn" href="/login/">ENTRAR</a>
+    </div>
+  </section>
+
+  <footer>© 2026 Combate à Desinformação</footer>
+
+  <script type="module" src="/app.js"></script>
+  <script type="module">
+    import { auth, db } from '/firebase-config.js';
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { doc, getDoc, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { api, el, enviarMidia, midiaElemento } from '/api.js';
+
+    const $ = (id) => document.getElementById(id);
+    const textos = {
+      pendente: 'Seu pedido para ser voluntário está aguardando análise.',
+      formulario: 'Pediram que você preencha um formulário. Saia e entre de novo para responder.',
+      analise: 'Seu formulário foi enviado e está com os administradores.',
+      aceito: 'Você é voluntário. Acesse a área de moderação pelo menu.',
+      recusado: 'Seu último pedido para ser voluntário não foi aceito.',
+    };
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { $('bloqueado').style.display = 'block'; return; }
+      $('conteudo').style.display = 'block';
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      const d = snap.exists() ? snap.data() : {};
+      $('ola').textContent = d.nome ? 'Olá, ' + d.nome : 'Minha conta';
+      const st = d.statusVoluntario || 'nenhum';
+      $('status-vol').textContent = d.ehAdmin ? 'Você é administrador.' : (textos[st] || 'Sua conta é de usuário.');
+      $('btn-voluntario').style.display = (!d.ehAdmin && !d.ehVoluntario && ['nenhum', 'recusado'].includes(st)) ? 'inline-block' : 'none';
+
+      const q = query(collection(db, 'midiaSubmissoes'), where('uid', '==', user.uid));
+      onSnapshot(q, (s) => {
+        const itens = s.docs.map((x) => x.data()).sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)));
+        const lista = $('lista-envios');
+        if (!itens.length) { lista.innerHTML = '<p class="msg">Nenhum envio ainda.</p>'; return; }
+        lista.innerHTML = '';
+        const nomes = { fake: 'é fake', verdadeiro: 'é verdadeiro', inconclusivo: 'não foi possível confirmar' };
+        itens.forEach((it) => lista.appendChild(el('div', { class: 'midia-item' }, midiaElemento(it),
+          el('div', {},
+            el('p', { class: it.status === 'respondido' ? 'status-respondido' : 'status-pendente', texto: it.status === 'respondido' ? 'Respondido' : 'Aguardando análise' }),
+            it.veredito ? el('p', {}, el('strong', { texto: 'Resultado: ' + (nomes[it.veredito] || '') })) : null,
+            it.resposta ? el('p', { texto: it.resposta }) : null))));
+      });
+    });
+
+    $('btn-voluntario').addEventListener('click', async () => {
+      try { await api('/api/conta', { acao: 'solicitar' }); $('msg-vol').textContent = 'Pedido enviado! Aguarde a análise.'; $('btn-voluntario').style.display = 'none'; }
+      catch (e) { $('msg-vol').textContent = e.message; }
+    });
+
+    $('btn-enviar').addEventListener('click', async () => {
+      const inp = $('arquivo'), msg = $('msg-envio');
+      if (!inp.files.length) { msg.textContent = 'Escolha um arquivo primeiro.'; return; }
+      msg.textContent = 'Enviando...';
+      try { await enviarMidia(inp.files[0]); msg.textContent = 'Enviado! A resposta aparece aqui embaixo quando um voluntário responder.'; inp.value = ''; }
+      catch (e) { msg.textContent = e.message; }
+    });
+  </script>
+</body>
+</html>

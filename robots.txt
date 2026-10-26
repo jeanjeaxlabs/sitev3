@@ -1,0 +1,8 @@
+User-agent: *
+Disallow: /login/
+Disallow: /account/
+Disallow: /moderar/
+Disallow: /admin/
+Disallow: /api/
+
+Sitemap: https://SEU-DOMINIO.vercel.app/sitemap.xml

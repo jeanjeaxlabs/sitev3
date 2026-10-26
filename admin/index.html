@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administração</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand" onclick="location.href='/'"><span>INÍCIO</span></div>
+    <div class="links">
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+    <button class="kebab" aria-label="Abrir menu"><i></i><i></i><i></i></button>
+    <div class="mobile-menu">
+      <a href="/">INÍCIO</a>
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+  </nav>
+
+  <section class="section" id="conteudo" style="display:none;">
+    <div class="card fade-up">
+      <h2>Formulários de voluntários para revisar</h2>
+      <div id="lista-revisoes"><p class="msg">Nenhum formulário aguardando.</p></div>
+    </div>
+
+    <div class="card fade-up">
+      <h2>Pedidos para ser voluntário</h2>
+      <div id="lista-pedidos"><p class="msg">Nenhum pedido no momento.</p></div>
+      <p class="msg">Também é possível ir direto para a <a href="/moderar/" style="color:#fff;">área de moderação</a>.</p>
+    </div>
+
+    <div class="card fade-up delay-1">
+      <h2>Todas as contas</h2>
+      <table>
+        <thead><tr><th>Nome / e-mail</th><th>Usuário</th><th>Voluntário</th><th>Admin</th><th></th></tr></thead>
+        <tbody id="tabela-usuarios"></tbody>
+      </table>
+    </div>
+
+    <div class="card fade-up delay-2">
+      <h2>Criar nova conta</h2>
+      <label for="novo-nome">Nome</label><input type="text" id="novo-nome">
+      <label for="novo-email">E-mail</label><input type="email" id="novo-email">
+      <label for="nova-senha">Senha (mínimo 6 caracteres)</label><input type="password" id="nova-senha">
+      <label for="novo-tipo">Tipo de conta</label>
+      <select id="novo-tipo">
+        <option value="usuario">Usuário</option>
+        <option value="voluntario">Voluntário</option>
+        <option value="admin">Administrador</option>
+      </select>
+      <button class="btn" id="btn-criar-conta" type="button" style="margin-top:16px;">CRIAR CONTA</button>
+      <p id="msg-criar-conta" class="msg"></p>
+    </div>
+
+    <div class="card fade-up">
+      <h2>Formulário do detector</h2>
+      <p class="msg">Aparece para quem analisa uma notícia com mais de 25% de chance de ser falsa.</p>
+      <div id="editor-detector"></div>
+    </div>
+
+    <div class="card fade-up">
+      <h2>Formulário de voluntário</h2>
+      <p class="msg">Enviado a quem pediu para ser voluntário e foi encaminhado para o formulário.</p>
+      <div id="editor-voluntario"></div>
+    </div>
+
+    <div class="card fade-up">
+      <h2>Textos do site</h2>
+      <label for="hero-titulo-campo">Título da página inicial</label>
+      <textarea id="hero-titulo-campo" rows="2"></textarea>
+      <label for="paragrafo-1-campo">"O que é Fake News" - primeiro parágrafo</label>
+      <textarea id="paragrafo-1-campo" rows="3"></textarea>
+      <label for="paragrafo-2-campo">"O que é Fake News" - segundo parágrafo</label>
+      <textarea id="paragrafo-2-campo" rows="3"></textarea>
+      <button class="btn" id="btn-salvar-textos" type="button" style="margin-top:16px;">SALVAR TEXTOS</button>
+      <p id="msg-textos" class="msg"></p>
+    </div>
+  </section>
+
+  <section class="section" id="bloqueado" style="display:none;">
+    <div class="card center">
+      <p class="aviso">Essa página é só para administradores.</p>
+      <a class="btn" href="/login/">ENTRAR</a>
+    </div>
+  </section>
+
+  <footer>© 2026 Combate à Desinformação</footer>
+
+  <script type="module" src="/app.js"></script>
+  <script type="module">
+    import { auth, db } from '/firebase-config.js';
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { api, el } from '/api.js';
+
+    const $ = (id) => document.getElementById(id);
+    const PADRAO_DETECTOR = [
+      { id: 'fonte', rotulo: 'Fonte da notícia', tipo: 'texto', obrigatorio: false, opcoes: '' },
+      { id: 'titulo', rotulo: 'Título', tipo: 'texto', obrigatorio: false, opcoes: '' },
+      { id: 'veiculo', rotulo: 'Veículo de informação', tipo: 'texto', obrigatorio: false, opcoes: '' },
+      { id: 'link', rotulo: 'Link, se tiver', tipo: 'texto', obrigatorio: false, opcoes: '' },
+      { id: 'obs', rotulo: 'Observações', tipo: 'textarea', obrigatorio: false, opcoes: '' },
+    ];
+    const PADRAO_VOLUNTARIO = [
+      { id: 'motivo', rotulo: 'Por que você quer ser voluntário?', tipo: 'textarea', obrigatorio: true, opcoes: '' },
+      { id: 'turma', rotulo: 'Turma ou ano', tipo: 'texto', obrigatorio: true, opcoes: '' },
+      { id: 'horas', rotulo: 'Quantas horas por semana você consegue ajudar?', tipo: 'texto', obrigatorio: true, opcoes: '' },
+    ];
+
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) { $('bloqueado').style.display = 'block'; return; }
+      const snap = await getDoc(doc(db, 'users', user.uid));
+      if (!snap.exists() || !snap.data().ehAdmin) { $('bloqueado').style.display = 'block'; return; }
+      $('conteudo').style.display = 'block';
+      carregarRevisoes(); carregarPedidos(); carregarUsuarios(); carregarTextos();
+      editor('formulario-detector', 'editor-detector', PADRAO_DETECTOR);
+      editor('formulario-voluntario', 'editor-voluntario', PADRAO_VOLUNTARIO);
+    });
+
+    // ---------- revisão dos formulários de voluntário ----------
+    async function carregarRevisoes() {
+      const box = $('lista-revisoes');
+      try {
+        const { revisoes } = await api('/api/conta', { acao: 'listarRevisoes' });
+        if (!revisoes.length) { box.innerHTML = '<p class="msg">Nenhum formulário aguardando.</p>'; return; }
+        box.innerHTML = '';
+        revisoes.forEach((r) => {
+          const decidir = (aceitar) => async () => { await api('/api/conta', { acao: 'decidir', uid: r.uid, aceitar }); carregarRevisoes(); carregarUsuarios(); };
+          box.appendChild(el('div', { class: 'card' },
+            el('p', {}, el('strong', { texto: (r.nome || 'Sem nome') + ' - ' + r.email })),
+            (r.respostas || []).map((x) => el('div', { class: 'resp' }, el('strong', { texto: x.pergunta }), x.resposta)),
+            el('div', { class: 'acoes' },
+              el('button', { class: 'btn pequeno', texto: 'Aceitar', onclick: decidir(true) }),
+              el('button', { class: 'btn pequeno', texto: 'Recusar', onclick: decidir(false) }))));
+        });
+      } catch (e) { box.innerHTML = '<p class="msg">Não foi possível carregar.</p>'; }
+    }
+
+    // ---------- pedidos pendentes ----------
+    async function carregarPedidos() {
+      const box = $('lista-pedidos');
+      try {
+        const { pedidos } = await api('/api/conta', { acao: 'listarPedidos' });
+        if (!pedidos.length) { box.innerHTML = '<p class="msg">Nenhum pedido no momento.</p>'; return; }
+        box.innerHTML = '';
+        pedidos.forEach((p) => {
+          const simples = (acao) => async () => { await api('/api/conta', { acao, uid: p.uid }); carregarPedidos(); carregarUsuarios(); };
+          box.appendChild(el('div', { class: 'midia-item' },
+            el('div', { style: 'flex:1;' }, el('p', { texto: (p.nome || 'Sem nome') + ' quer ser voluntário' }), el('p', { class: 'msg', texto: p.email })),
+            el('div', { class: 'acoes' },
+              el('button', { class: 'btn pequeno', texto: 'Aceitar', onclick: simples('aceitar') }),
+              el('button', { class: 'btn pequeno', texto: 'Enviar formulário', onclick: simples('pedirFormulario') }),
+              el('button', { class: 'btn pequeno', texto: 'Recusar', onclick: async () => { await api('/api/conta', { acao: 'decidir', uid: p.uid, aceitar: false }); carregarPedidos(); } }))));
+        });
+      } catch (e) { box.innerHTML = '<p class="msg">Não foi possível carregar.</p>'; }
+    }
+
+    // ---------- contas ----------
+    async function carregarUsuarios() {
+      const tabela = $('tabela-usuarios');
+      try {
+        const { usuarios } = await api('/api/conta', { acao: 'listarUsuarios' });
+        tabela.innerHTML = '';
+        usuarios.forEach((u) => {
+          const marca = (v) => { const c = el('input', { type: 'checkbox' }); c.checked = v; return c; };
+          const cu = marca(u.ehUsuario), cv = marca(u.ehVoluntario), ca = marca(u.ehAdmin);
+          const msg = el('span', { class: 'msg' });
+          tabela.appendChild(el('tr', {},
+            el('td', { texto: (u.nome ? u.nome + ' - ' : '') + u.email }),
+            el('td', {}, cu), el('td', {}, cv), el('td', {}, ca),
+            el('td', {}, el('button', { class: 'btn pequeno', texto: 'Salvar', onclick: async () => {
+              try { await api('/api/conta', { acao: 'editarUsuario', uid: u.uid, ehUsuario: cu.checked, ehVoluntario: cv.checked, ehAdmin: ca.checked }); msg.textContent = ' salvo'; }
+              catch (e) { msg.textContent = ' ' + e.message; }
+            } }), msg)));
+        });
+      } catch (e) { tabela.innerHTML = '<tr><td>Não foi possível carregar as contas.</td></tr>'; }
+    }
+
+    $('btn-criar-conta').addEventListener('click', async () => {
+      const msg = $('msg-criar-conta');
+      msg.textContent = 'Criando...';
+      try {
+        await api('/api/conta', { acao: 'criarUsuario', nome: $('novo-nome').value, email: $('novo-email').value, senha: $('nova-senha').value, tipo: $('novo-tipo').value });
+        msg.textContent = 'Conta criada.'; carregarUsuarios();
+      } catch (e) { msg.textContent = e.message; }
+    });
+
+    // ---------- editor de formulários ----------
+    async function editor(docId, containerId, padrao) {
+      const cont = $(containerId);
+      let campos = padrao.map((c) => ({ ...c }));
+      const snap = await getDoc(doc(db, 'config', docId));
+      if (snap.exists() && snap.data().campos && snap.data().campos.length) campos = snap.data().campos;
+      const msg = el('p', { class: 'msg' });
+
+      function desenhar() {
+        cont.innerHTML = '';
+        campos.forEach((c, i) => {
+          const opc = el('input', { type: 'text', placeholder: 'Opções separadas por ;', value: c.opcoes || '' });
+          opc.oninput = () => (c.opcoes = opc.value);
+          const rot = el('input', { type: 'text', placeholder: 'Pergunta', value: c.rotulo || '' });
+          rot.oninput = () => (c.rotulo = rot.value);
+          const tipo = el('select');
+          [['texto', 'Texto curto'], ['textarea', 'Texto longo'], ['opcoes', 'Lista de opções']].forEach(([v, t]) => { const o = el('option', { value: v, texto: t }); if (c.tipo === v) o.selected = true; tipo.appendChild(o); });
+          tipo.onchange = () => { c.tipo = tipo.value; opc.style.visibility = c.tipo === 'opcoes' ? 'visible' : 'hidden'; };
+          opc.style.visibility = c.tipo === 'opcoes' ? 'visible' : 'hidden';
+          const obr = el('input', { type: 'checkbox', style: 'width:auto;' }); obr.checked = !!c.obrigatorio; obr.onchange = () => (c.obrigatorio = obr.checked);
+          cont.appendChild(el('div', { class: 'campo-linha' }, rot, tipo, opc, el('label', {}, obr, ' obrigatório'),
+            el('button', { class: 'btn pequeno', type: 'button', texto: 'Remover', onclick: () => { campos.splice(i, 1); desenhar(); } })));
+        });
+        cont.appendChild(el('div', { class: 'acoes' },
+          el('button', { class: 'btn pequeno', type: 'button', texto: 'Adicionar pergunta', onclick: () => { campos.push({ id: 'c' + Date.now(), rotulo: '', tipo: 'texto', obrigatorio: false, opcoes: '' }); desenhar(); } }),
+          el('button', { class: 'btn pequeno', type: 'button', texto: 'Salvar formulário', onclick: async () => {
+            const limpos = campos.filter((c) => c.rotulo.trim()).map((c, i) => ({ id: c.id || 'c' + i, rotulo: c.rotulo.trim(), tipo: c.tipo, obrigatorio: !!c.obrigatorio, opcoes: c.opcoes || '' }));
+            try { await setDoc(doc(db, 'config', docId), { campos: limpos }); campos = limpos; msg.textContent = 'Formulário salvo.'; desenhar(); cont.appendChild(msg); }
+            catch (e) { msg.textContent = 'Não foi possível salvar.'; }
+          } })));
+        cont.appendChild(msg);
+      }
+      desenhar();
+    }
+
+    // ---------- textos do site ----------
+    async function carregarTextos() {
+      const snap = await getDoc(doc(db, 'conteudo', 'site'));
+      if (!snap.exists()) return;
+      const d = snap.data();
+      if (d.heroTitulo) $('hero-titulo-campo').value = d.heroTitulo;
+      if (d.oqueeParagrafo1) $('paragrafo-1-campo').value = d.oqueeParagrafo1;
+      if (d.oqueeParagrafo2) $('paragrafo-2-campo').value = d.oqueeParagrafo2;
+    }
+    $('btn-salvar-textos').addEventListener('click', async () => {
+      try {
+        await setDoc(doc(db, 'conteudo', 'site'), { heroTitulo: $('hero-titulo-campo').value, oqueeParagrafo1: $('paragrafo-1-campo').value, oqueeParagrafo2: $('paragrafo-2-campo').value }, { merge: true });
+        $('msg-textos').textContent = 'Textos salvos.';
+      } catch (e) { $('msg-textos').textContent = 'Não foi possível salvar.'; }
+    });
+  </script>
+</body>
+</html>

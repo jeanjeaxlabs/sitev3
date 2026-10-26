@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Entrar</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand" onclick="location.href='/'"><span>INÍCIO</span></div>
+    <div class="links">
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+    <button class="kebab" aria-label="Abrir menu"><i></i><i></i><i></i></button>
+    <div class="mobile-menu">
+      <a href="/">INÍCIO</a>
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+  </nav>
+
+  <section class="section" style="max-width:520px;">
+    <div class="card fade-up" id="card-login">
+      <div class="tabs">
+        <div class="tab ativa" id="tab-entrar">Entrar</div>
+        <div class="tab" id="tab-criar">Criar conta</div>
+      </div>
+
+      <form id="form-entrar">
+        <label for="email-entrar">E-mail</label>
+        <input type="email" id="email-entrar" required>
+        <label for="senha-entrar">Senha</label>
+        <input type="password" id="senha-entrar" required>
+        <button class="btn" type="submit" style="margin-top:20px;width:100%;">ENTRAR</button>
+        <p id="msg-entrar" class="msg"></p>
+      </form>
+
+      <form id="form-criar" class="form-oculto">
+        <label for="nome-criar">Nome</label>
+        <input type="text" id="nome-criar" required>
+        <label for="email-criar">E-mail</label>
+        <input type="email" id="email-criar" required>
+        <label for="senha-criar">Senha (mínimo 6 caracteres)</label>
+        <input type="password" id="senha-criar" required minlength="6">
+        <label style="display:flex;gap:10px;align-items:center;margin-top:18px;">
+          <input type="checkbox" id="quer-voluntario" style="width:auto;"> Também quero ser voluntário
+        </label>
+        <p class="msg">Toda conta começa como usuário. Se você pedir para ser voluntário, a equipe analisa seu pedido.</p>
+        <button class="btn" type="submit" style="margin-top:10px;width:100%;">CRIAR CONTA</button>
+        <p id="msg-criar" class="msg"></p>
+      </form>
+    </div>
+
+    <div class="card fade-up" id="card-status" style="display:none;">
+      <h2 id="status-titulo"></h2>
+      <p id="status-texto"></p>
+      <div id="campos-formulario"></div>
+      <p id="msg-status" class="msg"></p>
+      <div class="acoes">
+        <button class="btn" id="btn-status" type="button"></button>
+      </div>
+    </div>
+  </section>
+
+  <footer>© 2026 Combate à Desinformação</footer>
+
+  <script type="module" src="/app.js"></script>
+  <script type="module">
+    import { auth } from '/firebase-config.js';
+    import { signInWithCustomToken } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { api } from '/api.js';
+    import { montarCampos } from '/formulario.js';
+
+    const $ = (id) => document.getElementById(id);
+    const abas = { entrar: [$('tab-entrar'), $('form-entrar')], criar: [$('tab-criar'), $('form-criar')] };
+    function aba(qual) {
+      Object.entries(abas).forEach(([k, [t, f]]) => { t.classList.toggle('ativa', k === qual); f.classList.toggle('form-oculto', k !== qual); });
+    }
+    $('tab-entrar').onclick = () => aba('entrar');
+    $('tab-criar').onclick = () => aba('criar');
+
+    const destino = (p) => (p.ehAdmin ? '/admin/' : p.ehVoluntario ? '/moderar/' : '/account/');
+
+    function painel(titulo, texto, botao, acao) {
+      $('card-login').style.display = 'none';
+      $('card-status').style.display = 'block';
+      $('status-titulo').textContent = titulo;
+      $('status-texto').textContent = texto;
+      $('btn-status').textContent = botao;
+      $('btn-status').onclick = acao;
+    }
+
+    async function depoisDeEntrar(resp) {
+      await signInWithCustomToken(auth, resp.token);
+      const p = resp.perfil;
+      const seguir = () => (location.href = destino(p));
+
+      if (p.statusVoluntario === 'formulario' && resp.formulario) {
+        const ler = montarCampos($('campos-formulario'), resp.formulario);
+        painel('Formulário de voluntário', 'Responda as perguntas abaixo para continuar o seu pedido.', 'ENVIAR FORMULÁRIO', async () => {
+          try {
+            await api('/api/conta', { acao: 'enviarFormulario', respostas: ler() });
+            $('campos-formulario').innerHTML = '';
+            painel('Formulário enviado', 'Um administrador vai analisar suas respostas. Você verá o resultado no próximo login.', 'CONTINUAR', () => (location.href = '/account/'));
+          } catch (e) { $('msg-status').textContent = e.message; }
+        });
+      } else if (!p.statusVisto && p.statusVoluntario === 'aceito') {
+        await api('/api/conta', { acao: 'visto' });
+        painel('Pedido aceito', 'Seu pedido para ser voluntário foi aceito. Agora você pode ajudar a moderar.', 'CONTINUAR', seguir);
+      } else if (!p.statusVisto && p.statusVoluntario === 'recusado') {
+        await api('/api/conta', { acao: 'visto' });
+        painel('Pedido recusado', 'Seu pedido para ser voluntário não foi aceito desta vez. Você continua com a conta de usuário.', 'CONTINUAR', seguir);
+      } else if (['pendente', 'analise'].includes(p.statusVoluntario)) {
+        painel('Pedido em análise', 'Seu pedido para ser voluntário ainda está sendo analisado.', 'CONTINUAR', seguir);
+      } else seguir();
+    }
+
+    $('form-entrar').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('msg-entrar').textContent = 'Entrando...';
+      try {
+        await depoisDeEntrar(await api('/api/conta', { acao: 'entrar', email: $('email-entrar').value, senha: $('senha-entrar').value }));
+      } catch (erro) { $('msg-entrar').textContent = erro.message; }
+    });
+
+    $('form-criar').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      $('msg-criar').textContent = 'Criando conta...';
+      try {
+        await depoisDeEntrar(await api('/api/conta', {
+          acao: 'registrar', nome: $('nome-criar').value, email: $('email-criar').value,
+          senha: $('senha-criar').value, quererSerVoluntario: $('quer-voluntario').checked,
+        }));
+      } catch (erro) { $('msg-criar').textContent = erro.message; }
+    });
+  </script>
+</body>
+</html>

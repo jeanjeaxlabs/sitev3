@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Detector de Fake News | Combate à Desinformação</title>
+<meta name="description" content="Combate à Desinformação: projeto do Colégio São José para ensinar a identificar fake news, com detector de notícias falsas e voluntários verificando conteúdos.">
+<meta name="keywords" content="combate, desinformação, combate à desinformação, fake news, notícias falsas, detector de fake news, checagem de fatos, colégio são josé">
+<link rel="canonical" href="https://SEU-DOMINIO.vercel.app/detector/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Detector de Fake News | Combate à Desinformação">
+<meta property="og:description" content="Combate à Desinformação: projeto do Colégio São José para ensinar a identificar fake news, com detector de notícias falsas e voluntários verificando conteúdos.">
+<meta property="og:url" content="https://SEU-DOMINIO.vercel.app/detector/">
+<meta property="og:locale" content="pt_BR">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <nav>
+    <div class="brand" onclick="location.href='/'"><span>INÍCIO</span></div>
+    <div class="links">
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+    <button class="kebab" aria-label="Abrir menu"><i></i><i></i><i></i></button>
+    <div class="mobile-menu">
+      <a href="/">INÍCIO</a>
+      <a href="/oquee/">O QUE É FAKE NEWS</a>
+      <a href="/detector/">DETECTOR</a>
+      <span class="nav-account"></span>
+    </div>
+  </nav>
+
+  <section class="section">
+    <div class="card center fade-up">
+      <h2>Detector de Fake News</h2>
+      <p>Cole aqui o texto de uma notícia que você recebeu. O programa estima a chance de ela ser falsa.</p>
+      <p class="aviso">O resultado é só uma previsão. Ele não prova que algo é verdade nem mentira, e pode errar para os dois lados.</p>
+      <textarea id="texto" rows="6" placeholder="Cole aqui o texto da notícia..."></textarea>
+      <button class="btn" id="btn-verificar" type="button">VERIFICAR</button>
+
+      <div id="resultado" style="width:100%;display:none;">
+        <p id="percTexto" style="font-size:22px;font-weight:700;"></p>
+        <div class="result-bar"><div id="resultFill" class="result-fill"></div></div>
+        <p id="palavrasEncontradas" class="msg"></p>
+        <p class="msg">Lembrete: isto é uma previsão automática, não uma certeza. Confira sempre em sites de jornalismo.</p>
+
+        <div id="bloco-formulario" style="display:none;text-align:left;margin-top:20px;">
+          <h3>Ajude a conferir essa notícia</h3>
+          <p class="msg">A chance de ser falsa passou de 25%. Se você souber, conte de onde veio:</p>
+          <div id="campos-formulario"></div>
+          <button class="btn pequeno" id="btn-enviar-form" type="button" style="margin-top:14px;">ENVIAR INFORMAÇÕES</button>
+          <p id="msg-form" class="msg"></p>
+        </div>
+
+        <p style="margin-top:20px;">A previsão ajudou?</p>
+        <div class="feedback-btns">
+          <button id="btn-acertou" type="button">Sim, acertou</button>
+          <button id="btn-errou" type="button">Não, errou</button>
+        </div>
+        <p id="feedbackMsg" class="msg"></p>
+      </div>
+    </div>
+
+    <div class="card" id="card-midia" style="display:none;">
+      <h2>Enviar foto ou vídeo para análise</h2>
+      <p>Um voluntário vai olhar e a resposta aparece na sua conta. Tamanho máximo: 3 MB.</p>
+      <input type="file" id="arquivo" accept="image/*,video/*">
+      <button class="btn" id="btn-enviar-midia" type="button" style="margin-top:16px;">ENVIAR PARA ANÁLISE</button>
+      <p id="msg-midia" class="msg"></p>
+    </div>
+
+    <div class="card" id="painel-palavras" style="display:none;">
+      <h2>Gerenciar palavras-chave</h2>
+      <p class="msg">Expressões que o programa procura. Os números mostram quantas vezes foram vistas em textos falsos e verdadeiros. Remova as que não são um sinal claro.</p>
+      <ul id="lista-palavras"></ul>
+      <div class="linha-add">
+        <input type="text" id="nova-palavra" placeholder="Nova expressão suspeita...">
+        <button class="btn pequeno" id="add-palavra" type="button">Adicionar</button>
+      </div>
+    </div>
+  </section>
+
+  <footer>© 2026 Combate à Desinformação</footer>
+
+  <script type="module" src="/app.js"></script>
+  <script type="module" src="/script.js"></script>
+  <script type="module" src="/detector-admin.js"></script>
+  <script type="module">
+    import { auth } from '/firebase-config.js';
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { enviarMidia } from '/api.js';
+    onAuthStateChanged(auth, (u) => { document.getElementById('card-midia').style.display = u ? 'block' : 'none'; });
+    document.getElementById('btn-enviar-midia').addEventListener('click', async () => {
+      const msg = document.getElementById('msg-midia'), inp = document.getElementById('arquivo');
+      if (!inp.files.length) { msg.textContent = 'Escolha um arquivo primeiro.'; return; }
+      msg.textContent = 'Enviando...';
+      try { await enviarMidia(inp.files[0]); msg.textContent = 'Enviado! A resposta vai aparecer na sua conta.'; inp.value = ''; }
+      catch (e) { msg.textContent = e.message; }
+    });
+  </script>
+</body>
+</html>
